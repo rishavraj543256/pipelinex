@@ -26,7 +26,7 @@ For local Airflow, copy `.env.example` to `.env`, fill every value, and run `doc
 
 Run `pip install -r requirements-api.txt` with Python 3.11. Set `DATABASE_URL` to a dedicated PostgreSQL database and `CORS_ORIGINS` to `http://localhost:5173`. Run `alembic upgrade head` and `uvicorn pipelinex.api:app`. In `frontend`, run `npm ci` and `npm run dev`. FastAPI serves interactive documentation at `/docs`.
 
-This mode uses bounded Python execution, JSON checkpoints and PostgreSQL run snapshots. It accepts only generated retail records and named failure scenarios, with up to 500 orders and five runs per one-hour session. SQL is a choice of two read-only server-defined queries over synthetic Gold results. CSV exports and all run reads require the owning session. Keep demo credentials out of client builds. Before inviting public traffic, configure ingress rate controls and expired-session cleanup.
+This mode uses bounded Python execution, JSON checkpoints and PostgreSQL run snapshots. It accepts only generated retail records and named failure scenarios, with up to 500 orders and five runs per one-hour session. New sessions trigger expired-session cleanup and admission is capped at 50 active sessions across workers. SQL is a choice of two read-only server-defined queries over synthetic Gold results. CSV exports and all run reads require the owning session. Keep demo credentials out of client builds. Configure ingress rate controls for public traffic.
 
 The Netlify build expects `VITE_API_URL` set to the Render origin. Render expects `DATABASE_URL` and the exact Netlify origin in `CORS_ORIGINS`. Use a separate Neon database and role. These manifests are deployment configuration, not evidence of a live deployment.
 

@@ -1,5 +1,6 @@
 """Bounded synthetic lab API. Session credentials are random and stored as digests."""
 import hashlib
+import json
 import os
 import secrets
 import sqlite3
@@ -14,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, BigInteger, ForeignKey, String, create_engine, select, text
+from sqlalchemy import JSON, BigInteger, ForeignKey, String, create_engine, delete, func, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from pipelinex.engine import SchemaError, run, synthetic_orders
@@ -78,8 +79,15 @@ def ready(db: Session = Depends(database)):
 
 @app.post("/demo/sessions", status_code=201)
 def create_session(db: Session = Depends(database)):
+    now = int(time.time())
+    # Serialize admission across workers so the free database has a bounded active-session footprint.
+    db.execute(text("SELECT pg_advisory_xact_lock(84921017)"))
+    db.execute(delete(DemoSession).where(DemoSession.expires <= now))
+    active = db.scalar(select(func.count()).select_from(DemoSession))
+    if active is not None and active >= 50:
+        raise HTTPException(429, "Demo capacity reached. Try again later.")
     token = secrets.token_urlsafe(32)
-    db.add(DemoSession(digest=digest(token), expires=int(time.time()) + 3600, remaining=5))
+    db.add(DemoSession(digest=digest(token), expires=now + 3600, remaining=5))
     db.commit()
     return {"token": token, "expires_in": 3600}
 
@@ -117,8 +125,6 @@ def execute_scenario(body: Scenario):
         except SchemaError as error:
             status = "review_required"
             result = {"category": "schema", "message": str(error)}
-        import json
-
         bronze = json.loads((root / "bronze.json").read_text(encoding="utf-8"))
         silver_path = root / "silver.json"
         silver = json.loads(silver_path.read_text(encoding="utf-8"))["accepted"] if silver_path.exists() else []
