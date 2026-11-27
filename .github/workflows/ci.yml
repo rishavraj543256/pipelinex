@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir -p data/source
           printf '%s\n' '{"order_id":1,"customer_id":1,"product_id":1,"amount_cents":125}' > data/source/20261127.json
-          docker compose up -d postgres minio
+          docker compose up -d --build postgres minio
           python -m pip install minio
           python - <<'PY'
           from minio import Minio

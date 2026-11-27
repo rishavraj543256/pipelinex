@@ -74,7 +74,8 @@ def authenticated(credentials: HTTPAuthorizationCredentials = Depends(bearer)):
 @app.get("/ready")
 def ready(db: Session = Depends(database)):
     db.execute(text("SELECT 1 FROM demo_sessions LIMIT 1"))
-    return {"ready": True, "engine": "bounded-python"}
+    revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    return {"ready": True, "engine": "bounded-python", "alembic_revision": revision}
 
 
 @app.post("/demo/sessions", status_code=201)
