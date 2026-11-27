@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+.test-run-*/
+/tmp*/
+/.env
+/lakehouse/
+/spark-warehouse/
