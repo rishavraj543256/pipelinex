@@ -23,6 +23,15 @@ class DemoAPI(unittest.TestCase):
             path = f"/demo/runs/{result['id']}"
             self.assertEqual(client.get(path, headers=first).json(), result)
             self.assertEqual(client.get(path, headers=second).status_code, 404)
+            self.assertEqual(client.get("/demo/runs", headers=first).json()[0]["id"], result["id"])
+            self.assertEqual(client.get("/demo/runs", headers=second).json(), [])
+            self.assertEqual(len(result["datasets"]["bronze"]), 100)
+            self.assertEqual(client.get(path + "/query?view=totals", headers=first).json()["rows"][0]["orders"], 100)
+            self.assertEqual(client.get(path + "/query?view=invalid", headers=first).status_code, 422)
+            csv = client.get(path + "/gold.csv", headers=first)
+            self.assertEqual(csv.status_code, 200)
+            self.assertTrue(csv.text.startswith("product_id,orders,revenue_cents"))
+            self.assertEqual(client.get(path + "/gold.csv", headers=second).status_code, 404)
             for _ in range(4):
                 self.assertEqual(client.post("/demo/runs", json={"records": 1}, headers=first).status_code, 201)
             self.assertEqual(client.post("/demo/runs", json={}, headers=first).status_code, 429)

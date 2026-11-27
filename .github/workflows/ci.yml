@@ -1,6 +1,32 @@
 name: PipelineX CI
 on: [push, pull_request]
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm audit --audit-level high
+      - run: npm run build
+  containers:
+    runs-on: ubuntu-latest
+    env:
+      AIRFLOW_DB_PASSWORD: ci-only
+      AIRFLOW_SECRET_KEY: ci-only
+      MINIO_ROOT_USER: ci-user
+      MINIO_ROOT_PASSWORD: ci-password
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker build -f Dockerfile.api -t pipelinex-api:ci .
+      - run: docker compose build airflow-init
+      - run: docker compose run --rm --no-deps airflow-init dags list
   api:
     runs-on: ubuntu-latest
     services:

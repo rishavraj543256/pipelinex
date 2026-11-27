@@ -2,13 +2,15 @@
 import hashlib
 import os
 import secrets
+import sqlite3
 import time
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import Depends
 from pydantic import BaseModel, Field
@@ -44,6 +46,9 @@ class Scenario(BaseModel):
 
 
 app = FastAPI(title="PipelineX Synthetic Lab")
+origins = [origin.strip() for origin in os.environ.get("CORS_ORIGINS", "").split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST"],
+                   allow_headers=["Authorization", "Content-Type"])
 bearer = HTTPBearer()
 
 
@@ -101,15 +106,24 @@ def execute_scenario(body: Scenario):
 
     with TemporaryDirectory() as directory:
         root = Path(directory)
+        status = "completed"
         try:
             if body.failure == "gold":
                 try:
                     run(root, source, fail_gold=True)
                 except RuntimeError:
-                    return {"status": "recovered", **run(root, source)}
-            return {"status": "completed", **run(root, source)}
+                    status = "recovered"
+            result = run(root, source)
         except SchemaError as error:
-            return {"status": "review_required", "category": "schema", "message": str(error)}
+            status = "review_required"
+            result = {"category": "schema", "message": str(error)}
+        import json
+
+        bronze = json.loads((root / "bronze.json").read_text(encoding="utf-8"))
+        silver_path = root / "silver.json"
+        silver = json.loads(silver_path.read_text(encoding="utf-8"))["accepted"] if silver_path.exists() else []
+        return {"status": status, **result, "schema": bronze["columns"],
+                "datasets": {"bronze": bronze["rows"], "silver": silver, "gold": result.get("analytics", [])}}
 
 
 @app.post("/demo/runs", status_code=201)
@@ -135,3 +149,46 @@ def get_run(run_id: str, owner: str = Depends(authenticated), db: Session = Depe
     if execution is None:
         raise HTTPException(404, "Execution not found")
     return {"id": execution.id, **execution.details}
+
+
+@app.get("/demo/runs")
+def list_runs(owner: str = Depends(authenticated), db: Session = Depends(database)):
+    executions = db.scalars(select(Execution).join(DemoSession).where(
+        Execution.owner == owner, DemoSession.expires > int(time.time())
+    ).order_by(Execution.created.desc(), Execution.id.desc()).limit(5))
+    return [{"id": item.id, "created": item.created, "status": item.details["status"]} for item in executions]
+
+
+@app.get("/demo/runs/{run_id}/gold.csv")
+def download_gold(run_id: str, owner: str = Depends(authenticated), db: Session = Depends(database)):
+    import csv
+    from io import StringIO
+
+    result = get_run(run_id, owner, db)
+    rows = result.get("analytics", [])
+    if not rows:
+        raise HTTPException(409, "Gold output is unavailable")
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=["product_id", "orders", "revenue_cents"])
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(buffer.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="pipelinex-gold.csv"'})
+
+
+@app.get("/demo/runs/{run_id}/query")
+def query_gold(run_id: str, view: Literal["products", "totals"] = "products",
+               owner: str = Depends(authenticated), db: Session = Depends(database)):
+    result = get_run(run_id, owner, db)
+    queries = {
+        "products": "SELECT product_id, orders, revenue_cents FROM gold ORDER BY revenue_cents DESC",
+        "totals": "SELECT SUM(orders) AS orders, SUM(revenue_cents) AS revenue_cents FROM gold",
+    }
+    with sqlite3.connect(":memory:") as connection:
+        connection.row_factory = sqlite3.Row
+        connection.execute("CREATE TABLE gold (product_id INTEGER, orders INTEGER, revenue_cents INTEGER)")
+        connection.executemany("INSERT INTO gold VALUES (:product_id, :orders, :revenue_cents)",
+                               result.get("analytics", []))
+        connection.execute("PRAGMA query_only=ON")
+        sql = queries[view]
+        return {"sql": sql, "rows": [dict(row) for row in connection.execute(sql)]}

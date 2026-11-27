@@ -1,0 +1,34 @@
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px system-ui, sans-serif; }
+.shell { --bg: #0d1521; --panel: #152233; --line: #36485b; --text: #edf8ff; --muted: #a8bdcc; --accent: #61e5bf; color-scheme: dark; background: var(--bg); color: var(--text); min-height: 100vh; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+.shell.light { --bg: #f1f6f7; --panel: #fff; --line: #b6c8ce; --text: #18292e; --muted: #465e67; --accent: #98efd6; color-scheme: light; }
+aside { background: var(--panel); padding: 28px 20px; border-right: 1px solid var(--line); }
+aside strong { font-size: 27px; letter-spacing: -.05em; }
+aside strong span { color: #32ae91; }
+nav { display: grid; gap: 16px; margin-top: 36px; }
+nav a, .muted { color: var(--muted); }
+main { max-width: 1250px; width: 100%; padding: clamp(16px, 4vw, 48px); }
+header, form, .stages { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+header { justify-content: space-between; margin-bottom: 24px; }
+h1 { margin: 0; font-size: clamp(26px, 4vw, 42px); }
+h2 { margin-top: 0; }
+section { padding: clamp(16px, 3vw, 28px); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin-bottom: 16px; }
+button, select, input { color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 9px 12px; font: inherit; }
+button { cursor: pointer; }
+button:disabled { opacity: .55; cursor: default; }
+button.primary, button[aria-pressed=true] { background: var(--accent); color: #102622; }
+label { display: grid; gap: 6px; }
+form { align-items: end; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 12px; }
+.metrics div { border: 1px solid var(--line); padding: 12px; border-radius: 8px; }
+.metrics strong { display: block; margin-top: 6px; font-size: 25px; }
+.status { text-transform: capitalize; }
+.error { color: #ff9d9d; }
+.light .error { color: #982632; }
+.stages { margin-bottom: 16px; }
+.stages button { text-transform: capitalize; }
+.table-wrap, pre { overflow: auto; }
+table { border-collapse: collapse; width: 100%; text-align: left; }
+th, td { border-bottom: 1px solid var(--line); padding: 8px 12px; overflow-wrap: anywhere; }
+li { margin-bottom: 8px; }
+@media (max-width: 740px) { .shell { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } nav { display: flex; flex-wrap: wrap; margin-top: 16px; } }

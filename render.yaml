@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: pipelinex-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.api
+    healthCheckPath: /ready
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

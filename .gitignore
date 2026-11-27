@@ -6,3 +6,7 @@ __pycache__/
 /lakehouse/
 /spark-warehouse/
 /data/
+/.bench-*/
+frontend/node_modules/
+frontend/.npm-cache/
+frontend/dist/
