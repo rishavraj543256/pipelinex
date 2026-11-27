@@ -18,4 +18,8 @@ Use `python -m pipelinex.spark_engine orders.json lakehouse batch1` with newline
 
 The Airflow DAG expects date-stamped source files under `/data/source` and writes to `/data/lakehouse`. Its retries use the same date-derived batch ID. SCD1 MERGE is available as a separate helper and expects an already deduplicated input with a monotonic per-key watermark.
 
-Work in progress includes SCD2, source watermark persistence, full Compose infrastructure, the public demo API and UI, benchmarks and hosting.
+The Delta ingestion ledger reserves a source window before processing and marks it complete after Gold commits. It rejects new windows while a batch is pending. Use one namespace and one active writer per source. Historical windows produce separate batch outputs and leave the forward cursor unchanged. SCD2 uses an atomic Delta MERGE to expire a current row and insert its successor. The helper expects one ordered change per key in each batch.
+
+For local Airflow, copy `.env.example` to `.env`, fill every value, and run `docker compose up --build`. Use a URL-safe database password. Create an Airflow administrator interactively with `docker compose exec airflow-web airflow users create` and its required account flags. Put dated NDJSON files in `data/source` and make `data/lakehouse` writable by the container user. MinIO runs as a separate local service. The DAG writes to the shared filesystem; the MinIO connector is pending.
+
+Work in progress includes the demo API and UI, benchmarks and hosting.

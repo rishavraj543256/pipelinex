@@ -20,7 +20,8 @@ def session():
     return configure_spark_with_delta_pip(builder).getOrCreate()
 
 
-def execute(spark, source: str, root: str, batch: str, *, fail_gold: bool = False):
+def execute(spark, source: str, root: str, batch: str, *, fail_gold: bool = False,
+            frame=None):
     from delta.tables import DeltaTable
     from pyspark.sql import Window
     from pyspark.sql import functions as F
@@ -43,7 +44,7 @@ def execute(spark, source: str, root: str, batch: str, *, fail_gold: bool = Fals
     if DeltaTable.isDeltaTable(spark, bronze_path):
         bronze = spark.read.format("delta").load(bronze_path)
     else:
-        raw = spark.read.option("mode", "FAILFAST").json(source)
+        raw = frame if frame is not None else spark.read.option("mode", "FAILFAST").json(source)
         classify_schema(set(raw.columns), allow_additions=True)
         if {"_batch", "_ingested_at", "_raw"} & set(raw.columns):
             raise ValueError("Source uses a reserved metadata column")

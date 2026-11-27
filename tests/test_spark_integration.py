@@ -8,6 +8,30 @@ from tests.test_engine import workspace_temp
 
 @unittest.skipUnless(os.environ.get("PIPELINEX_TEST_SPARK") == "1", "Requires Java and Delta Maven packages")
 class SparkIntegration(unittest.TestCase):
+    def test_incremental_ledger_and_backfill(self):
+        from pipelinex.incremental import ingest
+        from pipelinex.spark_engine import session
+
+        spark = session()
+        try:
+            with workspace_temp() as root:
+                orders = root / "orders.json"
+                orders.write_text("\n".join(json.dumps({**row, "watermark": row["order_id"]})
+                                            for row in synthetic_orders(4)), encoding="utf-8")
+                uri, lake = orders.as_uri(), (root / "lake").as_uri()
+                with self.assertRaisesRegex(RuntimeError, "Injected Gold"):
+                    ingest(spark, uri, lake, "first", 2, fail_gold=True)
+                with self.assertRaisesRegex(RuntimeError, "pending batch"):
+                    ingest(spark, uri, lake, "wrong", 4)
+                self.assertEqual(ingest(spark, uri, lake, "first", 2)["valid"], 2)
+                self.assertEqual(ingest(spark, uri, lake, "historical", 1, backfill_lower=-1)["valid"], 1)
+                final = ingest(spark, uri, lake, "second", 4)
+                self.assertEqual((final["lower_exclusive"], final["valid"]), (2, 2))
+                orders.unlink()
+                self.assertEqual(ingest(spark, uri, lake, "second", 4), final)
+        finally:
+            spark.stop()
+
     def test_history_merge_replay(self):
         from pipelinex.spark_engine import merge_history, session
 
