@@ -20,7 +20,7 @@ The Airflow DAG expects date-stamped source files under `/data/source` and write
 
 The Delta ingestion ledger reserves a source window before processing and marks it complete after Gold commits. It rejects new windows while a batch is pending. Use one namespace and one active writer per source. Historical windows produce separate batch outputs and leave the forward cursor unchanged. SCD2 uses an atomic Delta MERGE to expire a current row and insert its successor. The helper expects one ordered change per key in each batch.
 
-For local Airflow, copy `.env.example` to `.env`, fill every value, and run `docker compose up --build`. Use a URL-safe database password. Create an Airflow administrator interactively with `docker compose exec airflow-web airflow users create` and its required account flags. Put dated NDJSON files in `data/source` and make `data/lakehouse` writable by the container user. MinIO runs as a separate local service. The DAG writes to the shared filesystem; the MinIO connector is pending.
+For local Airflow, copy `.env.example` to `.env`, fill every value, and run `docker compose up --build`. Use a URL-safe database password. Create an Airflow administrator interactively with `docker compose exec airflow-web airflow users create` and its required account flags. Put dated NDJSON files in `data/source`. The default destination is the shared filesystem. To use MinIO, create a dedicated bucket and set `PIPELINEX_LAKEHOUSE` and `PIPELINEX_S3_ENDPOINT` as shown in the environment example. Serialize writers for each destination. The S3A configuration uses Delta's single-driver log store and does not support multiple independent writers.
 
 ### Lightweight recruiter demo
 
@@ -40,4 +40,16 @@ Run `python bench.py` to generate and process deterministic synthetic orders. On
 | 10,000 | 1.9825 | 4,858,460 |
 | 100,000 | 27.2033 | 47,654,471 |
 
-Spark timing remains unmeasured. The demo has no Spark watermark or SCD2 explorer. Those features are currently available through the full engine's Python interfaces.
+### Measured Spark benchmark
+
+One [Java 17 Ubuntu CI run](https://github.com/rishavraj543256/pipelinex/actions/runs/45979598244) used Spark 3.5.5 in `local[2]` mode with Delta 3.3.2. Timings cover Spark processing, Delta I/O and reconciliation counts. Dataset generation is outside the timer. The first batch includes JVM warm-up, so the rows are not directly comparable as a scaling curve.
+
+| Orders | Initial batch | Checkpoint replay |
+|---:|---:|---:|
+| 1,000 | 25.38 s | 1.64 s |
+| 10,000 | 10.36 s | 1.25 s |
+| 100,000 | 10.29 s | 1.27 s |
+
+Each replay succeeded after the source file was removed. All benchmark batches reconciled input rows to Silver and Gold counts. This was single-host processing on a hosted runner; JVM peak memory was not measured.
+
+The public demo does not read the Spark watermark ledger or SCD2 tables. Those features remain available through the full engine's Python interfaces.

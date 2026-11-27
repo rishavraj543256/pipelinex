@@ -28,7 +28,6 @@ jobs:
       - run: docker compose config --quiet
       - run: docker build -f Dockerfile.api -t pipelinex-api:ci .
       - run: docker compose build airflow-init
-      - run: docker compose run --rm --no-deps airflow-init dags list
       - name: Execute the Airflow DAG against MinIO and verify Delta objects
         run: |
           mkdir -p data/source
@@ -49,6 +48,7 @@ jobs:
                   time.sleep(2)
           PY
           docker compose run --rm airflow-init db migrate
+          docker compose run --rm airflow-init dags list
           docker compose run --rm airflow-init dags test pipelinex_retail 2026-11-27
           docker compose run --rm airflow-init dags test pipelinex_retail 2026-11-27
           python - <<'PY'
