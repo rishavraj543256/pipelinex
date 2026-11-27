@@ -1,6 +1,7 @@
 """Local Spark and Delta execution for immutable retail ingestion batches."""
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 
@@ -18,7 +19,19 @@ def session():
         .config("spark.jars.repositories", "https://repo.maven.apache.org/maven2")
         .config("spark.sql.shuffle.partitions", "4")
     )
-    return configure_spark_with_delta_pip(builder).getOrCreate()
+    endpoint = os.environ.get("PIPELINEX_S3_ENDPOINT")
+    packages = []
+    if endpoint:
+        builder = (
+            builder.config("spark.hadoop.fs.s3a.endpoint", endpoint)
+            .config("spark.hadoop.fs.s3a.path.style.access", "true")
+            .config("spark.hadoop.fs.s3a.connection.ssl.enabled", str(endpoint.startswith("https://")).lower())
+            .config("spark.hadoop.fs.s3a.aws.credentials.provider",
+                    "com.amazonaws.auth.EnvironmentVariableCredentialsProvider")
+            .config("spark.delta.logStore.s3a.impl", "io.delta.storage.S3SingleDriverLogStore")
+        )
+        packages.append("org.apache.hadoop:hadoop-aws:3.3.4")
+    return configure_spark_with_delta_pip(builder, extra_packages=packages).getOrCreate()
 
 
 def execute(spark, source: str, root: str, batch: str, *, fail_gold: bool = False,
@@ -145,13 +158,15 @@ def merge_history(spark, incoming, path: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
-    parser.add_argument("lakehouse", type=Path)
+    parser.add_argument("lakehouse")
     parser.add_argument("batch")
     args = parser.parse_args()
     spark = session()
     try:
-        print(json.dumps(execute(spark, args.source.resolve().as_uri(),
-                                 args.lakehouse.resolve().as_uri(), args.batch)))
+        destination = args.lakehouse
+        if not destination.startswith("s3a://"):
+            destination = Path(destination).resolve().as_uri()
+        print(json.dumps(execute(spark, args.source.resolve().as_uri(), destination, args.batch)))
     finally:
         spark.stop()
 

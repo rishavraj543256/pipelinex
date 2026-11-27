@@ -128,8 +128,17 @@ def execute_scenario(body: Scenario):
         bronze = json.loads((root / "bronze.json").read_text(encoding="utf-8"))
         silver_path = root / "silver.json"
         silver = json.loads(silver_path.read_text(encoding="utf-8"))["accepted"] if silver_path.exists() else []
+        datasets = {"bronze": bronze["rows"], "silver": silver, "gold": result.get("analytics", [])}
+        lineage = []
+        parent = None
+        for stage in datasets:
+            if not (root / f"{stage}.json").is_file():
+                break
+            lineage.append({"stage": stage, "parent": parent, "records": len(datasets[stage]),
+                            "restored": stage in result.get("restored_stages", [])})
+            parent = stage
         return {"status": status, **result, "schema": bronze["columns"],
-                "datasets": {"bronze": bronze["rows"], "silver": silver, "gold": result.get("analytics", [])}}
+                "datasets": datasets, "lineage": lineage}
 
 
 @app.post("/demo/runs", status_code=201)

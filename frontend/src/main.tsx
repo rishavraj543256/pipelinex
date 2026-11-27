@@ -7,6 +7,7 @@ type Layer = "bronze" | "silver" | "gold";
 type Run = {
   id: string; status: string; input?: number; valid?: number; invalid?: number; message?: string;
   schema: string[]; datasets: Record<Layer, Row[]>; quarantine?: {original: Row; reason: string; fields: string[]}[];
+  lineage?: { stage: Layer; parent: Layer | null; records: number; restored: boolean }[];
   retries?: Row[]; restored_stages?: string[]; compatible_additions?: string[];
 };
 type History = {id: string; created: number; status: string};
@@ -102,7 +103,10 @@ function App() {
           <div className="metrics">{[["Bronze records", current.datasets.bronze.length], ["Valid records", current.valid], ["Quarantined", current.invalid], ["Gold groups", current.datasets.gold.length]].map(([name, value]) =>
             <div key={name}><span>{name}</span><strong>{value ?? "—"}</strong></div>)}</div></section>
         <section id="lineage"><h2>Lineage & dataset explorer</h2><div className="stages">
-          {(["bronze", "silver", "gold"] as const).map(item => <button key={item} aria-pressed={layer === item} onClick={() => setLayer(item)}>{item} · {current.datasets[item].length}</button>)}</div>
+          {(current.lineage ?? []).map(({stage, parent, records, restored}) => <div key={stage}>
+            {parent && <span aria-hidden="true">→ </span>}
+            <button aria-pressed={layer === stage} onClick={() => setLayer(stage)}>{stage} · {records}{restored ? " · restored" : ""}</button>
+          </div>)}</div>
           <Table rows={current.datasets[layer]} /><h3>Observed Bronze schema</h3><p>{current.schema.join(" · ")}</p>
           {!!current.compatible_additions?.length && <p>Compatible additions: {current.compatible_additions.join(", ")}</p>}</section>
         <section id="quality"><h2>Quality & recovery</h2>{current.message && <p className="error">{current.message}</p>}

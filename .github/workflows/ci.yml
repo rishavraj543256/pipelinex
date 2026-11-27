@@ -21,12 +21,44 @@ jobs:
       AIRFLOW_SECRET_KEY: ci-only
       MINIO_ROOT_USER: ci-user
       MINIO_ROOT_PASSWORD: ci-password
+      PIPELINEX_S3_ENDPOINT: http://minio:9000
+      PIPELINEX_LAKEHOUSE: s3a://pipelinex/lakehouse
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config --quiet
       - run: docker build -f Dockerfile.api -t pipelinex-api:ci .
       - run: docker compose build airflow-init
       - run: docker compose run --rm --no-deps airflow-init dags list
+      - name: Execute the Airflow DAG against MinIO and verify Delta objects
+        run: |
+          mkdir -p data/source
+          printf '%s\n' '{"order_id":1,"customer_id":1,"product_id":1,"amount_cents":125}' > data/source/20261127.json
+          docker compose up -d postgres minio
+          python -m pip install minio
+          python - <<'PY'
+          from minio import Minio
+          import os, time
+          client = Minio("127.0.0.1:9000", os.environ["MINIO_ROOT_USER"], os.environ["MINIO_ROOT_PASSWORD"], secure=False)
+          for attempt in range(15):
+              try:
+                  client.make_bucket("pipelinex")
+                  break
+              except Exception:
+                  if attempt == 14:
+                      raise
+                  time.sleep(2)
+          PY
+          docker compose run --rm airflow-init db migrate
+          docker compose run --rm airflow-init dags test pipelinex_retail 2026-11-27
+          docker compose run --rm airflow-init dags test pipelinex_retail 2026-11-27
+          python - <<'PY'
+          from minio import Minio
+          import os
+          client = Minio("127.0.0.1:9000", os.environ["MINIO_ROOT_USER"], os.environ["MINIO_ROOT_PASSWORD"], secure=False)
+          names = {item.object_name for item in client.list_objects("pipelinex", recursive=True)}
+          for stage in ("bronze", "silver", "gold", "quarantine"):
+              assert f"lakehouse/20261127/{stage}/_delta_log/00000000000000000000.json" in names, names
+          PY
   api:
     runs-on: ubuntu-latest
     services:

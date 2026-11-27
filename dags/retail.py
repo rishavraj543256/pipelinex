@@ -1,5 +1,6 @@
 """Daily immutable JSON ingestion with task-level retries and date backfills."""
 from datetime import datetime, timedelta, timezone
+import os
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
@@ -16,7 +17,7 @@ with DAG(
 ) as dag:
     run_lakehouse = BashOperator(
         task_id="run_lakehouse",
-        bash_command='python -m pipelinex.spark_engine "/data/source/$BATCH.json" /data/lakehouse "$BATCH"',
-        env={"BATCH": "{{ ds_nodash }}"},
+        bash_command='python -m pipelinex.spark_engine "/data/source/$BATCH.json" "$LAKEHOUSE" "$BATCH"',
+        env={"BATCH": "{{ ds_nodash }}", "LAKEHOUSE": os.environ.get("PIPELINEX_LAKEHOUSE", "/data/lakehouse")},
         append_env=True,
     )
