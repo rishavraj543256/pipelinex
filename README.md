@@ -1,5 +1,10 @@
 # PipelineX
 
+- [Live demo](https://pipelinex-rishavraj.netlify.app/)
+- [Production API documentation](https://pipelinex-wyrh.onrender.com/docs)
+
+Select **Try Live Demo**, choose a scenario, and execute the pipeline. A production smoke test verified 100 orders through Bronze and Silver and 12 Gold groups. It also verified Gold recovery from Bronze and Silver checkpoints, required-field drift stopping before Silver, invalid results entering quarantine, and retry after an injected source timeout. The production API returned both analytical queries and a CSV, retrieved persisted run results, denied cross-session access, and enforced the five-run quota.
+
 PipelineX processes synthetic retail orders through immutable Bronze snapshots, validated Silver records, quarantine and product revenue aggregates in Gold.
 
 ```mermaid
