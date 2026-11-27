@@ -99,6 +99,47 @@ def merge_current(spark, incoming, path: str):
      .whenNotMatchedInsertAll().execute())
 
 
+def merge_history(spark, incoming, path: str):
+    """Atomically expire and insert versions for one ordered change per key."""
+    from delta.tables import DeltaTable
+    from pyspark.sql import functions as F
+
+    fields = sorted(REQUIRED - {"order_id"})
+    candidates = incoming.select("order_id", "watermark", *fields)
+    if candidates.filter("order_id IS NULL OR watermark IS NULL").take(1):
+        raise ValueError("Keys and watermarks must be non-null")
+    if candidates.groupBy("order_id").count().filter("count > 1").take(1):
+        raise ValueError("Apply at most one change per key per batch")
+    candidates = candidates.withColumn(
+        "fingerprint", F.sha2(F.to_json(F.struct(*fields), {"ignoreNullFields": "false"}), 256)
+    )
+    versions = (candidates.withColumn("valid_from", F.col("watermark"))
+                .withColumn("valid_to", F.lit(None).cast("long"))
+                .withColumn("is_current", F.lit(True)).drop("watermark"))
+    if not DeltaTable.isDeltaTable(spark, path):
+        versions.write.format("delta").mode("errorifexists").save(path)
+        return
+
+    table = DeltaTable.forPath(spark, path)
+    active = table.toDF().filter("is_current").select(
+        "order_id", F.col("valid_from").alias("active_from"),
+        F.col("fingerprint").alias("active_fingerprint"),
+    )
+    changes = versions.join(active, "order_id", "left").filter(
+        "active_from IS NULL OR (valid_from > active_from AND fingerprint <> active_fingerprint)"
+    )
+    inserts = changes.select(*versions.columns).withColumn("merge_key", F.lit(None).cast("long"))
+    expirations = changes.filter("active_from IS NOT NULL").select(*versions.columns).withColumn(
+        "merge_key", F.col("order_id")
+    )
+    (table.alias("target").merge(inserts.unionByName(expirations).alias("source"),
+                                 "target.order_id = source.merge_key AND target.is_current")
+     .whenMatchedUpdate(set={"valid_to": "source.valid_from", "is_current": "false"})
+     .whenNotMatchedInsert(condition="source.merge_key IS NULL",
+                           values={column: f"source.{column}" for column in versions.columns})
+     .execute())
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
