@@ -65,3 +65,10 @@ jobs:
         env:
           PIPELINEX_TEST_SPARK: '1'
           SPARK_LOCAL_IP: 127.0.0.1
+      - run: python bench_spark.py 1000 10000 100000 | tee spark-benchmark.json
+        env:
+          SPARK_LOCAL_IP: 127.0.0.1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-spark-benchmark
+          path: spark-benchmark.json
